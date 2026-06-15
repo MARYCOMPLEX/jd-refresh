@@ -31,6 +31,15 @@ class JDCampusRefresh:
             'Content-Type': 'application/json; charset=UTF-8',
             'X-Requested-With': 'XMLHttpRequest',
             'Referer': 'https://campus.jd.com/api/wx/position/index?type=internship',
+            'Origin': 'https://campus.jd.com',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'sec-ch-ua': '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Dest': 'empty',
             'Cookie': self.cookie
         }
 
