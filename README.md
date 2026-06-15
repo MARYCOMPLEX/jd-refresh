@@ -19,15 +19,26 @@
 3. 按 `F12` 打开开发者工具
 4. 切换到 `Application` 标签页（或 `应用` 标签页）
 5. 左侧展开 `Cookies` → `https://campus.jd.com`
-6. 复制所有 Cookie（格式：`key1=value1; key2=value2; ...`）
+6. **重要**：右键第一个 Cookie → 选择 `Select All` → 右键 → `Copy`
+7. 或者手动复制所有 Cookie（格式：`key1=value1; key2=value2; ...`）
 
-**重要的 Cookie 字段**（至少需要这些）：
+**关键提示**：
+- ⚠️ 必须复制**所有** Cookie，不要遗漏任何一个
+- ⚠️ Cookie 格式为 `key1=value1; key2=value2; ...`（用分号和空格分隔）
+- ⚠️ 如果遇到 401 错误，说明 Cookie 不完整或已过期
+
+**必须包含的关键字段**：
 - `3AB9D23F7A4B3CSS` - 会话凭证（最重要）
 - `__jda` - 京东分析
 - `__jdb` - 京东标识
 - `__jdc` - 京东客户端
 - `__jdu` - 京东用户
 - `thor` - 雷神标识
+
+**Cookie 示例格式**：
+```
+3AB9D23F7A4B3CSS=ABC123DEF456; __jda=122270672.1234567890.1234567890.1234567890.1234567890.12; __jdb=122270672.3.1234567890|2.1234567890; __jdc=campus_jd_com; __jdu=1234567890; thor=ABCDEFGHIJKLMNOP
+```
 
 ### 2. Fork 仓库并配置 Secret
 
@@ -159,6 +170,61 @@ python refresh.py
 3. **请求频率**：脚本已内置请求间隔，避免请求过快导致封号
 4. **隐私安全**：不要将 Cookie 泄露给他人，不要在公开场合分享
 5. **合规使用**：本工具仅供学习交流使用，请遵守京东平台规则
+
+## 常见问题
+
+### Q: 遇到 401 错误怎么办？
+
+**错误信息**：`{"success": true, "body": {"code": 401}}`
+
+**原因**：
+- Cookie 已过期或无效
+- Cookie 不完整，缺少关键字段
+- 账号在其他地方登录，导致当前 Cookie 失效
+
+**解决方法**：
+1. 重新登录京东校园招聘网站
+2. 按 F12 → Application → Cookies → campus.jd.com
+3. 右键第一个 Cookie → Select All → Copy（复制所有 Cookie）
+4. 更新 GitHub Secret `JD_COOKIE`
+
+### Q: 如何确认 Cookie 是否完整？
+
+检查 Cookie 字符串中是否包含以下关键字段：
+- `3AB9D23F7A4B3CSS=` - 会话凭证
+- `__jda=` - 京东分析
+- `__jdb=` - 京东标识
+- `__jdc=` - 京东客户端
+- `__jdu=` - 京东用户
+- `thor=` - 雷神标识
+
+如果缺少任何一个，请重新复制完整的 Cookie。
+
+### Q: Cookie 多久会过期？
+
+通常几天到几周，具体取决于京东的策略。建议：
+- 每周检查一次执行日志
+- 如果失败，重新获取 Cookie
+- 设置日历提醒每月更新一次
+
+### Q: 为什么显示"暂时无法刷新"？
+
+可能原因：
+- 还在 8 小时冷却期内（正常现象）
+- 投递记录 ID 不正确或已失效
+- 该职位已下架或关闭投递
+
+### Q: 如何修改投递记录 ID？
+
+编辑 `refresh.py` 第 12 行：
+```python
+self.delivery_record_ids = [你的投递记录ID]
+```
+
+支持多个 ID：
+```python
+self.delivery_record_ids = [3802615, 3802616, 3802617]
+```
 
 ## 许可证
 
