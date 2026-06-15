@@ -70,7 +70,28 @@ cd jd-refresh
 pip install -r requirements.txt
 ```
 
-设置环境变量并测试：
+#### 方法一：使用验证工具（推荐）
+
+快速验证 Cookie 是否有效，并自动获取投递记录 ID：
+
+```bash
+python verify_cookie.py
+```
+
+按提示输入 Cookie，工具会：
+- ✅ 验证 Cookie 是否有效
+- 📋 列出所有投递记录及其 ID
+- 💡 直接生成 `JD_DELIVERY_RECORD_IDS` 配置值
+
+#### 方法二：直接测试刷新功能
+
+```bash
+python test_local.py
+```
+
+按提示输入 Cookie 和投递记录 ID，直接测试刷新功能。
+
+#### 方法三：手动设置环境变量
 
 ```bash
 # Windows (PowerShell)
