@@ -93,8 +93,14 @@ class JDCampusRefresh:
 
             print(f"  检查结果: {json.dumps(data, ensure_ascii=False)}")
 
-            if data.get('success'):
-                return True, data.get('body', {})
+            # 检查是否认证失败
+            body = data.get('body', {})
+            if isinstance(body, dict) and body.get('code') == 401:
+                print(f"  ❌ 认证失败: Cookie 可能已过期或无效")
+                return False, data
+
+            if data.get('success') and body.get('canRefresh'):
+                return True, data
             else:
                 return False, data
 
@@ -120,10 +126,21 @@ class JDCampusRefresh:
 
             print(f"  刷新结果: {json.dumps(data, ensure_ascii=False)}")
 
-            if data.get('success'):
-                notice_msg = data.get('body', {}).get('noticeMsg', '刷新成功')
-                print(f"  ✅ {notice_msg}")
-                return True
+            # 检查是否认证失败
+            body = data.get('body', {})
+            if isinstance(body, dict) and body.get('code') == 401:
+                print(f"  ❌ 认证失败: Cookie 可能已过期或无效")
+                return False
+
+            if data.get('success') and isinstance(body, dict):
+                notice_msg = body.get('noticeMsg', '刷新成功')
+                if body.get('success'):
+                    print(f"  ✅ {notice_msg}")
+                    return True
+                else:
+                    error_msg = body.get('message', '刷新失败')
+                    print(f"  ❌ {error_msg}")
+                    return False
             else:
                 error_msg = data.get('message', '刷新失败')
                 print(f"  ❌ {error_msg}")
@@ -164,6 +181,7 @@ class JDCampusRefresh:
 
         success_count = 0
         fail_count = 0
+        auth_failed = False  # 标记是否遇到认证失败
 
         # 处理每个投递记录
         for idx, record_id in enumerate(record_ids, 1):
@@ -171,6 +189,13 @@ class JDCampusRefresh:
 
             # 先检查是否可以刷新
             can_refresh, check_data = self.check_can_refresh(record_id)
+
+            # 检查是否认证失败
+            if isinstance(check_data.get('body'), dict) and check_data.get('body', {}).get('code') == 401:
+                auth_failed = True
+                fail_count += 1
+                print()
+                continue
 
             if can_refresh:
                 # 执行刷新
@@ -196,6 +221,20 @@ class JDCampusRefresh:
         print(f"  ❌ 失败: {fail_count}")
         print(f"  📝 总计: {len(record_ids)}")
         print(f"{'='*60}\n")
+
+        # 如果遇到认证失败，输出特殊提示
+        if auth_failed:
+            print("⚠️  检测到认证失败 (401 错误)")
+            print("💡 可能原因：")
+            print("   1. Cookie 已过期，请重新获取并更新 JD_COOKIE Secret")
+            print("   2. Cookie 不完整，请确保复制了所有 Cookie 字段")
+            print("   3. 账号在其他地方登录，导致当前 Cookie 失效")
+            print()
+            print("🔧 解决方法：")
+            print("   1. 重新登录京东校园招聘网站")
+            print("   2. 按 F12 → Application → Cookies → campus.jd.com")
+            print("   3. 复制所有 Cookie 并更新 GitHub Secret")
+            print()
 
         # 如果全部失败，退出码为 1
         if fail_count == len(record_ids):
