@@ -4,9 +4,14 @@
 
 ### 第 1 步：获取 Cookie（2 分钟）
 
+**⚠️ 关键：必须复制所有 Cookie！**
+
 1. Chrome 打开 https://campus.jd.com/ 并登录
 2. 按 **F12** → **Application** → **Cookies** → **https://campus.jd.com**
-3. 复制所有 Cookie（格式：`key1=value1; key2=value2; ...`）
+3. **按 Ctrl+A 全选所有 Cookie** → **右键 → Copy**
+4. 确保复制了所有 Cookie（通常有 30+ 个）
+
+**重要**：如果只复制部分 Cookie 会导致 401 错误！
 
 ### 第 2 步：配置 GitHub Secret（2 分钟）
 

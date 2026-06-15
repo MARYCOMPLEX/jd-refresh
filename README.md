@@ -14,30 +14,36 @@
 
 ### 1. 获取 Cookie
 
+**⚠️ 非常重要：必须复制所有 Cookie，一个都不能少！**
+
 1. 使用 Chrome 浏览器打开 [京东校园招聘](https://campus.jd.com/)
 2. 登录你的账号
 3. 按 `F12` 打开开发者工具
 4. 切换到 `Application` 标签页（或 `应用` 标签页）
 5. 左侧展开 `Cookies` → `https://campus.jd.com`
-6. **重要**：右键第一个 Cookie → 选择 `Select All` → 右键 → `Copy`
-7. 或者手动复制所有 Cookie（格式：`key1=value1; key2=value2; ...`）
+6. **方法 A（推荐）**: 
+   - 在 Cookie 列表中，**按 Ctrl+A 全选所有 Cookie**
+   - **右键 → Copy**（复制）
+   - 这样会复制成 `key1=value1; key2=value2; ...` 格式
+7. **方法 B（备选）**: 
+   - 右键第一个 Cookie → **Select All** → 右键 → **Copy**
 
 **关键提示**：
-- ⚠️ 必须复制**所有** Cookie，不要遗漏任何一个
+- ⚠️ 必须复制**所有** Cookie（通常有 30+ 个），不要遗漏任何一个
 - ⚠️ Cookie 格式为 `key1=value1; key2=value2; ...`（用分号和空格分隔）
-- ⚠️ 如果遇到 401 错误，说明 Cookie 不完整或已过期
+- ⚠️ 如果遇到 401 错误，99% 是因为 Cookie 不完整
 
-**必须包含的关键字段**：
+**必须包含的关键字段**（缺一不可）：
 - `3AB9D23F7A4B3CSS` - 会话凭证（最重要）
-- `__jda` - 京东分析
-- `__jdb` - 京东标识
-- `__jdc` - 京东客户端
-- `__jdu` - 京东用户
-- `thor` - 雷神标识
+- `pt_key`, `pt_pin`, `pt_token` - 京东统一登录凭证
+- `thor` - 雷神系统标识
+- `shshshfpa`, `shshshfpb`, `shshshfpx` - 设备指纹
+- `__jda`, `__jdb`, `__jdc`, `__jdu`, `__jdv` - 京东分析标识
+- `flash`, `light_key` - 会话标识
 
-**Cookie 示例格式**：
+**完整 Cookie 示例**（实际 Cookie 会更长）：
 ```
-3AB9D23F7A4B3CSS=ABC123DEF456; __jda=122270672.1234567890.1234567890.1234567890.1234567890.12; __jdb=122270672.3.1234567890|2.1234567890; __jdc=campus_jd_com; __jdu=1234567890; thor=ABCDEFGHIJKLMNOP
+__jdv=209750407|direct|-|none|-|1780066785419; __jdu=17800667854182031713985; shshshfpa=xxx; shshshfpx=xxx; shshshfpb=xxx; pt_key=xxx; pt_pin=xxx; pt_token=xxx; 3AB9D23F7A4B3CSS=xxx; thor=xxx; flash=xxx; light_key=xxx; ...
 ```
 
 ### 2. Fork 仓库并配置 Secret
