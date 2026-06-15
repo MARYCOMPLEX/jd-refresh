@@ -1,4 +1,4 @@
-name: 更新定时执行时间
+name: 生成定时配置
 
 on:
   workflow_dispatch:
@@ -89,15 +89,10 @@ on:
           - '23:30'
 
 jobs:
-  update-schedule:
+  generate-config:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
       - name: 转换北京时间到 UTC
         id: convert
         run: |
@@ -130,68 +125,63 @@ jobs:
           echo "utc_hour_2=$UTC_HOUR_2" >> $GITHUB_OUTPUT
           echo "utc_min_2=$UTC_MIN_2" >> $GITHUB_OUTPUT
 
-          echo "📅 时间转换："
-          echo "  北京时间 ${{ inputs.schedule_time_1 }} → UTC $UTC_HOUR_1:$UTC_MIN_1"
-          echo "  北京时间 ${{ inputs.schedule_time_2 }} → UTC $UTC_HOUR_2:$UTC_MIN_2"
-
-      - name: 更新 workflow 文件
+      - name: 显示配置说明
         run: |
           UTC_HOUR_1="${{ steps.convert.outputs.utc_hour_1 }}"
           UTC_MIN_1="${{ steps.convert.outputs.utc_min_1 }}"
           UTC_HOUR_2="${{ steps.convert.outputs.utc_hour_2 }}"
           UTC_MIN_2="${{ steps.convert.outputs.utc_min_2 }}"
 
-          # 生成新的 cron 表达式
-          # 格式：分 时 日 月 周
-          NEW_CRON="    - cron: '$UTC_MIN_1 $UTC_HOUR_1 * * *'\n    - cron: '$UTC_MIN_2 $UTC_HOUR_2 * * *'"
-
-          # 更新 refresh.yml 文件（替换 schedule 部分）
-          # 使用 awk 来替换整个 schedule 块
-          awk -v new_cron="$NEW_CRON" '
-          BEGIN { in_schedule = 0; printed = 0 }
-          /^  schedule:/ {
-            print $0
-            print new_cron
-            in_schedule = 1
-            printed = 1
-            next
-          }
-          in_schedule && /^    - cron:/ { next }
-          in_schedule && /^  [a-z]/ { in_schedule = 0 }
-          { print }
-          ' .github/workflows/refresh.yml > .github/workflows/refresh.yml.tmp
-
-          mv .github/workflows/refresh.yml.tmp .github/workflows/refresh.yml
-
-          echo "✅ 已更新 cron 表达式"
-          echo "📅 第一次：UTC $UTC_MIN_1 $UTC_HOUR_1 * * * (北京时间 ${{ inputs.schedule_time_1 }})"
-          echo "📅 第二次：UTC $UTC_MIN_2 $UTC_HOUR_2 * * * (北京时间 ${{ inputs.schedule_time_2 }})"
-
-      - name: 提交更改
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/refresh.yml
-          git commit -m "chore: 更新定时执行时间为北京时间 ${{ inputs.schedule_time_1 }} 和 ${{ inputs.schedule_time_2 }}"
-          git push
-
-      - name: 显示成功消息
-        run: |
           echo "============================================================"
-          echo "✅ 定时执行时间已更新！"
+          echo "📅 你选择的执行时间"
           echo "============================================================"
           echo ""
-          echo "📅 新的执行时间："
-          echo "  第一次：北京时间 ${{ inputs.schedule_time_1 }}"
-          echo "  第二次：北京时间 ${{ inputs.schedule_time_2 }}"
+          echo "北京时间："
+          echo "  第一次：${{ inputs.schedule_time_1 }}"
+          echo "  第二次：${{ inputs.schedule_time_2 }}"
           echo ""
-          echo "⏰ 下次自动执行："
-          echo "  - 如果当前时间已过今天的执行时间，将在明天执行"
-          echo "  - 如果当前时间未到今天的执行时间，将在今天执行"
+          echo "对应 UTC 时间："
+          echo "  第一次：$UTC_HOUR_1:$UTC_MIN_1"
+          echo "  第二次：$UTC_HOUR_2:$UTC_MIN_2"
           echo ""
-          echo "💡 提示："
-          echo "  - 更改会立即生效"
-          echo "  - 你可以随时回到这里修改时间"
-          echo "  - 建议两次执行间隔至少 8 小时（京东冷却期）"
+          echo "============================================================"
+          echo "📝 如何更新定时执行时间"
+          echo "============================================================"
+          echo ""
+          echo "请按以下步骤操作："
+          echo ""
+          echo "1. 进入仓库主页"
+          echo ""
+          echo "2. 点击 .github/workflows/refresh.yml 文件"
+          echo ""
+          echo "3. 点击编辑按钮（铅笔图标）"
+          echo ""
+          echo "4. 找到第 12-13 行的 schedule 部分，修改为："
+          echo ""
+          echo "  schedule:"
+          echo "    - cron: '$UTC_MIN_1 $UTC_HOUR_1 * * *'"
+          echo "    - cron: '$UTC_MIN_2 $UTC_HOUR_2 * * *'"
+          echo ""
+          echo "5. 点击 'Commit changes...'"
+          echo ""
+          echo "6. 填写提交信息：更新定时执行时间为北京时间 ${{ inputs.schedule_time_1 }} 和 ${{ inputs.schedule_time_2 }}"
+          echo ""
+          echo "7. 点击 'Commit changes' 完成"
+          echo ""
+          echo "============================================================"
+          echo "💡 提示"
+          echo "============================================================"
+          echo ""
+          echo "- 修改后立即生效"
+          echo "- 建议两次执行间隔至少 8 小时（京东冷却期）"
+          echo "- 可以随时回到这里重新生成配置"
+          echo ""
+          echo "============================================================"
+          echo "📋 完整的 schedule 配置（复制使用）"
+          echo "============================================================"
+          echo ""
+          echo "  schedule:"
+          echo "    - cron: '$UTC_MIN_1 $UTC_HOUR_1 * * *'"
+          echo "    - cron: '$UTC_MIN_2 $UTC_HOUR_2 * * *'"
           echo ""
           echo "============================================================"
