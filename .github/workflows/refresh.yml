@@ -12,8 +12,62 @@ on:
   schedule:
     - cron: '0 1,13 * * *'
 
-  # 允许手动触发
+  # 允许手动触发，支持自定义参数
   workflow_dispatch:
+    inputs:
+      schedule_time_1:
+        description: '第一次执行时间（北京时间，24小时制）'
+        required: false
+        default: '09:00'
+        type: choice
+        options:
+          - '06:00'
+          - '07:00'
+          - '08:00'
+          - '09:00'
+          - '10:00'
+          - '11:00'
+          - '12:00'
+          - '13:00'
+          - '14:00'
+          - '15:00'
+          - '16:00'
+          - '17:00'
+          - '18:00'
+          - '19:00'
+          - '20:00'
+          - '21:00'
+          - '22:00'
+          - '23:00'
+      schedule_time_2:
+        description: '第二次执行时间（北京时间，24小时制）'
+        required: false
+        default: '21:00'
+        type: choice
+        options:
+          - '06:00'
+          - '07:00'
+          - '08:00'
+          - '09:00'
+          - '10:00'
+          - '11:00'
+          - '12:00'
+          - '13:00'
+          - '14:00'
+          - '15:00'
+          - '16:00'
+          - '17:00'
+          - '18:00'
+          - '19:00'
+          - '20:00'
+          - '21:00'
+          - '22:00'
+          - '23:00'
+      run_now:
+        description: '立即执行一次刷新（忽略上面的时间设置）'
+        required: false
+        default: 'true'
+        type: boolean
 
 jobs:
   refresh:
@@ -38,6 +92,16 @@ jobs:
           JD_COOKIE: ${{ secrets.JD_COOKIE }}
         run: |
           python refresh.py
+
+      - name: 显示时间设置提示
+        if: github.event_name == 'workflow_dispatch' && !inputs.run_now
+        run: |
+          echo "📅 你设置的执行时间："
+          echo "  第一次：北京时间 ${{ inputs.schedule_time_1 }}"
+          echo "  第二次：北京时间 ${{ inputs.schedule_time_2 }}"
+          echo ""
+          echo "⚠️ 注意：这些时间仅供参考，实际定时执行仍使用 workflow 文件中的 cron 表达式"
+          echo "💡 如需修改定时执行时间，请编辑 .github/workflows/refresh.yml 文件"
 
       - name: 上传日志
         if: always()

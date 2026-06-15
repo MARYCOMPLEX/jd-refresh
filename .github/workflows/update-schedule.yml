@@ -1,0 +1,130 @@
+name: 更新定时执行时间
+
+on:
+  workflow_dispatch:
+    inputs:
+      schedule_time_1:
+        description: '第一次执行时间（北京时间，24小时制）'
+        required: true
+        default: '09:00'
+        type: choice
+        options:
+          - '06:00'
+          - '07:00'
+          - '08:00'
+          - '09:00'
+          - '10:00'
+          - '11:00'
+          - '12:00'
+          - '13:00'
+          - '14:00'
+          - '15:00'
+          - '16:00'
+          - '17:00'
+          - '18:00'
+          - '19:00'
+          - '20:00'
+          - '21:00'
+          - '22:00'
+          - '23:00'
+      schedule_time_2:
+        description: '第二次执行时间（北京时间，24小时制）'
+        required: true
+        default: '21:00'
+        type: choice
+        options:
+          - '06:00'
+          - '07:00'
+          - '08:00'
+          - '09:00'
+          - '10:00'
+          - '11:00'
+          - '12:00'
+          - '13:00'
+          - '14:00'
+          - '15:00'
+          - '16:00'
+          - '17:00'
+          - '18:00'
+          - '19:00'
+          - '20:00'
+          - '21:00'
+          - '22:00'
+          - '23:00'
+
+jobs:
+  update-schedule:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 转换北京时间到 UTC
+        id: convert
+        run: |
+          # 转换第一个时间
+          BJ_HOUR_1=$(echo "${{ inputs.schedule_time_1 }}" | cut -d':' -f1)
+          UTC_HOUR_1=$((BJ_HOUR_1 - 8))
+          if [ $UTC_HOUR_1 -lt 0 ]; then
+            UTC_HOUR_1=$((UTC_HOUR_1 + 24))
+          fi
+
+          # 转换第二个时间
+          BJ_HOUR_2=$(echo "${{ inputs.schedule_time_2 }}" | cut -d':' -f1)
+          UTC_HOUR_2=$((BJ_HOUR_2 - 8))
+          if [ $UTC_HOUR_2 -lt 0 ]; then
+            UTC_HOUR_2=$((UTC_HOUR_2 + 24))
+          fi
+
+          echo "utc_hour_1=$UTC_HOUR_1" >> $GITHUB_OUTPUT
+          echo "utc_hour_2=$UTC_HOUR_2" >> $GITHUB_OUTPUT
+
+          echo "📅 时间转换："
+          echo "  北京时间 ${{ inputs.schedule_time_1 }} → UTC $UTC_HOUR_1:00"
+          echo "  北京时间 ${{ inputs.schedule_time_2 }} → UTC $UTC_HOUR_2:00"
+
+      - name: 更新 workflow 文件
+        run: |
+          UTC_HOUR_1="${{ steps.convert.outputs.utc_hour_1 }}"
+          UTC_HOUR_2="${{ steps.convert.outputs.utc_hour_2 }}"
+
+          # 生成新的 cron 表达式
+          NEW_CRON="    - cron: '0 $UTC_HOUR_1,$UTC_HOUR_2 * * *'"
+
+          # 更新 refresh.yml 文件
+          sed -i "s/    - cron: '0 [0-9,]* \* \* \*'/$NEW_CRON/" .github/workflows/refresh.yml
+
+          echo "✅ 已更新 cron 表达式为: 0 $UTC_HOUR_1,$UTC_HOUR_2 * * *"
+          echo "📅 对应北京时间: ${{ inputs.schedule_time_1 }} 和 ${{ inputs.schedule_time_2 }}"
+
+      - name: 提交更改
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/refresh.yml
+          git commit -m "chore: 更新定时执行时间为北京时间 ${{ inputs.schedule_time_1 }} 和 ${{ inputs.schedule_time_2 }}"
+          git push
+
+      - name: 显示成功消息
+        run: |
+          echo "============================================================"
+          echo "✅ 定时执行时间已更新！"
+          echo "============================================================"
+          echo ""
+          echo "📅 新的执行时间："
+          echo "  第一次：北京时间 ${{ inputs.schedule_time_1 }}"
+          echo "  第二次：北京时间 ${{ inputs.schedule_time_2 }}"
+          echo ""
+          echo "⏰ 下次自动执行："
+          echo "  - 如果当前时间已过今天的执行时间，将在明天执行"
+          echo "  - 如果当前时间未到今天的执行时间，将在今天执行"
+          echo ""
+          echo "💡 提示："
+          echo "  - 更改会立即生效"
+          echo "  - 你可以随时回到这里修改时间"
+          echo "  - 建议两次执行间隔至少 8 小时（京东冷却期）"
+          echo ""
+          echo "============================================================"
