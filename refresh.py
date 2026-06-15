@@ -164,9 +164,14 @@ class JDCampusRefresh:
 
     def run(self):
         """执行刷新任务"""
+        # 获取北京时间（UTC+8）
+        import pytz
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        beijing_time = datetime.now(beijing_tz)
+
         print(f"\n{'='*60}")
         print(f"🚀 京东校园招聘活跃度刷新任务")
-        print(f"⏰ 执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"⏰ 执行时间: {beijing_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
         print(f"{'='*60}\n")
 
         # 验证配置
