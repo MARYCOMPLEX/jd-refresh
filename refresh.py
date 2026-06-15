@@ -190,6 +190,7 @@ class JDCampusRefresh:
 
         success_count = 0
         fail_count = 0
+        cooldown_count = 0  # 冷却期计数
         auth_failed = False  # 标记是否遇到认证失败
 
         # 处理每个投递记录
@@ -203,6 +204,15 @@ class JDCampusRefresh:
             if isinstance(check_data.get('body'), dict) and check_data.get('body', {}).get('code') == 401:
                 auth_failed = True
                 fail_count += 1
+                print()
+                continue
+
+            # 检查是否在冷却期
+            body = check_data.get('body', {})
+            if not body.get('canRefresh') and body.get('noticeMsg'):
+                notice_msg = body.get('noticeMsg', '')
+                print(f"  ⏰ 冷却期: {notice_msg}")
+                cooldown_count += 1
                 print()
                 continue
 
@@ -226,7 +236,8 @@ class JDCampusRefresh:
         # 统计结果
         print(f"{'='*60}")
         print(f"📊 执行结果统计:")
-        print(f"  ✅ 成功: {success_count}")
+        print(f"  ✅ 成功刷新: {success_count}")
+        print(f"  ⏰ 冷却期中: {cooldown_count}")
         print(f"  ❌ 失败: {fail_count}")
         print(f"  📝 总计: {len(record_ids)}")
         print(f"{'='*60}\n")
@@ -242,11 +253,19 @@ class JDCampusRefresh:
             print("🔧 解决方法：")
             print("   1. 重新登录京东校园招聘网站")
             print("   2. 按 F12 → Application → Cookies → campus.jd.com")
-            print("   3. 复制所有 Cookie 并更新 GitHub Secret")
+            print("   3. 按 Ctrl+A 全选所有 Cookie 并复制")
+            print("   4. 更新 GitHub Secret JD_COOKIE")
             print()
 
-        # 如果全部失败，退出码为 1
-        if fail_count == len(record_ids):
+        # 如果有冷却期的记录，给出提示
+        if cooldown_count > 0:
+            print("💡 提示：部分记录在冷却期内，这是正常现象")
+            print("   京东规定刷新后需等待 8 小时才能再次刷新")
+            print("   脚本将在下次定时执行时自动重试")
+            print()
+
+        # 只有真正失败（非冷却期）的才退出码为 1
+        if fail_count > 0 and success_count == 0 and cooldown_count == 0:
             sys.exit(1)
 
 
