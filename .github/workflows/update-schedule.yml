@@ -10,23 +10,41 @@ on:
         type: choice
         options:
           - '06:00'
+          - '06:30'
           - '07:00'
+          - '07:30'
           - '08:00'
+          - '08:30'
           - '09:00'
+          - '09:30'
           - '10:00'
+          - '10:30'
           - '11:00'
+          - '11:30'
           - '12:00'
+          - '12:30'
           - '13:00'
+          - '13:30'
           - '14:00'
+          - '14:30'
           - '15:00'
+          - '15:30'
           - '16:00'
+          - '16:30'
           - '17:00'
+          - '17:30'
           - '18:00'
+          - '18:30'
           - '19:00'
+          - '19:30'
           - '20:00'
+          - '20:30'
           - '21:00'
+          - '21:30'
           - '22:00'
+          - '22:30'
           - '23:00'
+          - '23:30'
       schedule_time_2:
         description: '第二次执行时间（北京时间，24小时制）'
         required: true
@@ -34,23 +52,41 @@ on:
         type: choice
         options:
           - '06:00'
+          - '06:30'
           - '07:00'
+          - '07:30'
           - '08:00'
+          - '08:30'
           - '09:00'
+          - '09:30'
           - '10:00'
+          - '10:30'
           - '11:00'
+          - '11:30'
           - '12:00'
+          - '12:30'
           - '13:00'
+          - '13:30'
           - '14:00'
+          - '14:30'
           - '15:00'
+          - '15:30'
           - '16:00'
+          - '16:30'
           - '17:00'
+          - '17:30'
           - '18:00'
+          - '18:30'
           - '19:00'
+          - '19:30'
           - '20:00'
+          - '20:30'
           - '21:00'
+          - '21:30'
           - '22:00'
+          - '22:30'
           - '23:00'
+          - '23:30'
 
 jobs:
   update-schedule:
@@ -66,39 +102,70 @@ jobs:
         id: convert
         run: |
           # 转换第一个时间
-          BJ_HOUR_1=$(echo "${{ inputs.schedule_time_1 }}" | cut -d':' -f1)
+          BJ_TIME_1="${{ inputs.schedule_time_1 }}"
+          BJ_HOUR_1=$(echo "$BJ_TIME_1" | cut -d':' -f1)
+          BJ_MIN_1=$(echo "$BJ_TIME_1" | cut -d':' -f2)
+
           UTC_HOUR_1=$((BJ_HOUR_1 - 8))
+          UTC_MIN_1=$BJ_MIN_1
+
           if [ $UTC_HOUR_1 -lt 0 ]; then
             UTC_HOUR_1=$((UTC_HOUR_1 + 24))
           fi
 
           # 转换第二个时间
-          BJ_HOUR_2=$(echo "${{ inputs.schedule_time_2 }}" | cut -d':' -f1)
+          BJ_TIME_2="${{ inputs.schedule_time_2 }}"
+          BJ_HOUR_2=$(echo "$BJ_TIME_2" | cut -d':' -f1)
+          BJ_MIN_2=$(echo "$BJ_TIME_2" | cut -d':' -f2)
+
           UTC_HOUR_2=$((BJ_HOUR_2 - 8))
+          UTC_MIN_2=$BJ_MIN_2
+
           if [ $UTC_HOUR_2 -lt 0 ]; then
             UTC_HOUR_2=$((UTC_HOUR_2 + 24))
           fi
 
           echo "utc_hour_1=$UTC_HOUR_1" >> $GITHUB_OUTPUT
+          echo "utc_min_1=$UTC_MIN_1" >> $GITHUB_OUTPUT
           echo "utc_hour_2=$UTC_HOUR_2" >> $GITHUB_OUTPUT
+          echo "utc_min_2=$UTC_MIN_2" >> $GITHUB_OUTPUT
 
           echo "📅 时间转换："
-          echo "  北京时间 ${{ inputs.schedule_time_1 }} → UTC $UTC_HOUR_1:00"
-          echo "  北京时间 ${{ inputs.schedule_time_2 }} → UTC $UTC_HOUR_2:00"
+          echo "  北京时间 ${{ inputs.schedule_time_1 }} → UTC $UTC_HOUR_1:$UTC_MIN_1"
+          echo "  北京时间 ${{ inputs.schedule_time_2 }} → UTC $UTC_HOUR_2:$UTC_MIN_2"
 
       - name: 更新 workflow 文件
         run: |
           UTC_HOUR_1="${{ steps.convert.outputs.utc_hour_1 }}"
+          UTC_MIN_1="${{ steps.convert.outputs.utc_min_1 }}"
           UTC_HOUR_2="${{ steps.convert.outputs.utc_hour_2 }}"
+          UTC_MIN_2="${{ steps.convert.outputs.utc_min_2 }}"
 
           # 生成新的 cron 表达式
-          NEW_CRON="    - cron: '0 $UTC_HOUR_1,$UTC_HOUR_2 * * *'"
+          # 格式：分 时 日 月 周
+          NEW_CRON="    - cron: '$UTC_MIN_1 $UTC_HOUR_1 * * *'\n    - cron: '$UTC_MIN_2 $UTC_HOUR_2 * * *'"
 
-          # 更新 refresh.yml 文件
-          sed -i "s/    - cron: '0 [0-9,]* \* \* \*'/$NEW_CRON/" .github/workflows/refresh.yml
+          # 更新 refresh.yml 文件（替换 schedule 部分）
+          # 使用 awk 来替换整个 schedule 块
+          awk -v new_cron="$NEW_CRON" '
+          BEGIN { in_schedule = 0; printed = 0 }
+          /^  schedule:/ {
+            print $0
+            print new_cron
+            in_schedule = 1
+            printed = 1
+            next
+          }
+          in_schedule && /^    - cron:/ { next }
+          in_schedule && /^  [a-z]/ { in_schedule = 0 }
+          { print }
+          ' .github/workflows/refresh.yml > .github/workflows/refresh.yml.tmp
 
-          echo "✅ 已更新 cron 表达式为: 0 $UTC_HOUR_1,$UTC_HOUR_2 * * *"
-          echo "📅 对应北京时间: ${{ inputs.schedule_time_1 }} 和 ${{ inputs.schedule_time_2 }}"
+          mv .github/workflows/refresh.yml.tmp .github/workflows/refresh.yml
+
+          echo "✅ 已更新 cron 表达式"
+          echo "📅 第一次：UTC $UTC_MIN_1 $UTC_HOUR_1 * * * (北京时间 ${{ inputs.schedule_time_1 }})"
+          echo "📅 第二次：UTC $UTC_MIN_2 $UTC_HOUR_2 * * * (北京时间 ${{ inputs.schedule_time_2 }})"
 
       - name: 提交更改
         run: |
