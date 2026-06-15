@@ -1,0 +1,43 @@
+name: 京东校园招聘活跃度刷新
+
+on:
+  # 定时执行 - 每天北京时间 09:00 和 21:00 (UTC 01:00 和 13:00)
+  schedule:
+    - cron: '0 1,13 * * *'
+
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 安装依赖
+        run: |
+          pip install -r requirements.txt
+
+      - name: 执行刷新任务
+        env:
+          JD_COOKIE: ${{ secrets.JD_COOKIE }}
+          JD_DELIVERY_RECORD_IDS: ${{ secrets.JD_DELIVERY_RECORD_IDS }}
+        run: |
+          python refresh.py
+
+      - name: 上传日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refresh-log-${{ github.run_number }}
+          path: |
+            *.log
+          retention-days: 7
