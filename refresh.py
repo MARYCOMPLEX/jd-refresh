@@ -14,9 +14,12 @@ class JDCampusRefresh:
     """京东校园招聘活跃度刷新器"""
 
     def __init__(self):
-        # 从环境变量读取配置
+        # 从环境变量读取 Cookie
         self.cookie = os.getenv('JD_COOKIE', '')
-        self.delivery_record_ids = os.getenv('JD_DELIVERY_RECORD_IDS', '')
+
+        # 投递记录 ID（写死，从 HAR 文件中提取）
+        # 如需修改，直接编辑这里的列表
+        self.delivery_record_ids = [3802615]
 
         # API 端点
         self.check_url = "https://campus.jd.com/api/wx/resume/checkCanResumeRefresh"
@@ -38,10 +41,42 @@ class JDCampusRefresh:
             return False
 
         if not self.delivery_record_ids:
-            print("❌ 错误: 未配置 JD_DELIVERY_RECORD_IDS 环境变量")
+            print("❌ 错误: 投递记录 ID 列表为空，请在代码中配置")
             return False
 
         return True
+
+    def test_cookie_validity(self):
+        """测试 Cookie 是否有效（首次运行时验证）"""
+        print("🔍 验证 Cookie 有效性...")
+        try:
+            # 使用获取投递列表 API 来验证 Cookie
+            url = "https://campus.jd.com/api/wx/delivery/officialInfo/list"
+            payload = {"pageNo": 1, "pageSize": 1}
+
+            response = requests.post(
+                url,
+                headers=self.headers,
+                json=payload,
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get('success'):
+                print("✅ Cookie 有效！\n")
+                return True
+            else:
+                error_msg = data.get('message', '未知错误')
+                print(f"❌ Cookie 无效: {error_msg}\n")
+                return False
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Cookie 验证失败: {e}\n")
+            return False
+        except Exception as e:
+            print(f"❌ 验证过程出错: {e}\n")
+            return False
 
     def check_can_refresh(self, delivery_record_id):
         """检查是否可以刷新活跃度"""
@@ -112,11 +147,17 @@ class JDCampusRefresh:
         if not self.validate_config():
             sys.exit(1)
 
-        # 解析投递记录 ID 列表（支持逗号分隔）
-        record_ids = [id.strip() for id in self.delivery_record_ids.split(',') if id.strip()]
+        # 首次验证 Cookie 是否有效
+        if not self.test_cookie_validity():
+            print("❌ Cookie 验证失败，请检查 JD_COOKIE 配置是否正确")
+            print("💡 提示：请重新获取 Cookie 并更新 GitHub Secret")
+            sys.exit(1)
+
+        # 投递记录 ID 列表
+        record_ids = self.delivery_record_ids
 
         if not record_ids:
-            print("❌ 错误: JD_DELIVERY_RECORD_IDS 为空")
+            print("❌ 错误: 投递记录 ID 列表为空")
             sys.exit(1)
 
         print(f"📋 待刷新的投递记录数量: {len(record_ids)}\n")
