@@ -1,10 +1,10 @@
 name: Keep Repository Active
 
 on:
-  # 每 6 小时执行一次，保持 GitHub Actions 调度器活跃
-  # 参考 nvidia 仓库的保活策略
+  # 每 1 小时执行一次，保持 GitHub Actions 调度器活跃
+  # 确保早上 9:30 和下午 17:40 的刷新任务能可靠执行
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 * * * *'
 
   # 允许手动触发
   workflow_dispatch:
@@ -18,5 +18,6 @@ jobs:
       - name: 保持 Actions 活跃
         run: |
           echo "✅ Keep-alive ping at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          echo "📊 This workflow runs every 6 hours to keep GitHub Actions scheduler active"
+          echo "📊 This workflow runs every hour to keep GitHub Actions scheduler active"
           echo "🎯 Ensures scheduled workflows (like refresh.yml) continue to run reliably"
+          echo "⏰ Critical refresh times: 09:30 and 17:40 Beijing Time"
