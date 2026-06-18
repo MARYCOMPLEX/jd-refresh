@@ -1,115 +1,38 @@
 name: 京东校园招聘活跃度刷新
 
 on:
-  # 定时执行 - 每小时检查一次，确保在指定时间段能成功刷新
-  # 目标刷新时间：北京时间 09:30 和 17:40
-  # 格式：分 时 日 月 周 (使用 UTC 时间，北京时间需要 -8 小时)
+  # GitHub Actions 使用 UTC。下面两个时间对应北京时间 UTC+8：
+  # - 01:20/25/30/35/40/45 UTC = 09:20-09:45 北京时间
+  # - 09:20/25/30/35/40/45 UTC = 17:20-17:45 北京时间
   #
-  # 策略：每小时执行，确保冷却期结束后立即刷新
-  # UTC 时间每小时的 30 分执行（对应北京时间每小时的 30 分）
+  # 注意：GitHub Actions 定时任务可能延迟，不提供准点 SLA。
+  # 多次唤起用于抵抗调度延迟，真正是否发送京东请求由 refresh.py
+  # 再按北京时间 09:30/17:30 的安全窗口和状态文件判断。
   schedule:
-    - cron: '30 * * * *'  # 每小时 30 分执行
+    - cron: '20,25,30,35,40,45 1,9 * * *'
 
-  # 允许手动触发，支持自定义参数
   workflow_dispatch:
-    inputs:
-      schedule_time_1:
-        description: '第一次执行时间（北京时间，24小时制）'
-        required: false
-        default: '09:00'
-        type: choice
-        options:
-          - '06:00'
-          - '06:30'
-          - '07:00'
-          - '07:30'
-          - '08:00'
-          - '08:30'
-          - '09:00'
-          - '09:30'
-          - '10:00'
-          - '10:30'
-          - '11:00'
-          - '11:30'
-          - '12:00'
-          - '12:30'
-          - '13:00'
-          - '13:30'
-          - '14:00'
-          - '14:30'
-          - '15:00'
-          - '15:30'
-          - '16:00'
-          - '16:30'
-          - '17:00'
-          - '17:30'
-          - '18:00'
-          - '18:30'
-          - '19:00'
-          - '19:30'
-          - '20:00'
-          - '20:30'
-          - '21:00'
-          - '21:30'
-          - '22:00'
-          - '22:30'
-          - '23:00'
-          - '23:30'
-      schedule_time_2:
-        description: '第二次执行时间（北京时间，24小时制）'
-        required: false
-        default: '21:00'
-        type: choice
-        options:
-          - '06:00'
-          - '06:30'
-          - '07:00'
-          - '07:30'
-          - '08:00'
-          - '08:30'
-          - '09:00'
-          - '09:30'
-          - '10:00'
-          - '10:30'
-          - '11:00'
-          - '11:30'
-          - '12:00'
-          - '12:30'
-          - '13:00'
-          - '13:30'
-          - '14:00'
-          - '14:30'
-          - '15:00'
-          - '15:30'
-          - '16:00'
-          - '16:30'
-          - '17:00'
-          - '17:30'
-          - '18:00'
-          - '18:30'
-          - '19:00'
-          - '19:30'
-          - '20:00'
-          - '20:30'
-          - '21:00'
-          - '21:30'
-          - '22:00'
-          - '22:30'
-          - '23:00'
-          - '23:30'
-      run_now:
-        description: '立即执行一次刷新（忽略上面的时间设置）'
-        required: false
-        default: 'true'
-        type: boolean
+
+concurrency:
+  group: jd-refresh
+  cancel-in-progress: false
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+
+      - name: 恢复刷新状态
+        uses: actions/cache@v4
+        with:
+          path: .refresh-state
+          key: refresh-state-${{ github.run_id }}
+          restore-keys: |
+            refresh-state-
 
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
@@ -127,21 +50,11 @@ jobs:
         run: |
           python refresh.py
 
-      - name: 显示时间设置提示
-        if: github.event_name == 'workflow_dispatch' && !inputs.run_now
-        run: |
-          echo "📅 你设置的执行时间："
-          echo "  第一次：北京时间 ${{ inputs.schedule_time_1 }}"
-          echo "  第二次：北京时间 ${{ inputs.schedule_time_2 }}"
-          echo ""
-          echo "⚠️ 注意：这些时间仅供参考，实际定时执行仍使用 workflow 文件中的 cron 表达式"
-          echo "💡 如需修改定时执行时间，请编辑 .github/workflows/refresh.yml 文件"
-
-      - name: 上传日志
+      - name: 上传刷新状态
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: refresh-log-${{ github.run_number }}
-          path: |
-            *.log
-          retention-days: 7
+          name: refresh-state-${{ github.run_number }}
+          path: .refresh-state
+          include-hidden-files: true
+          retention-days: 14

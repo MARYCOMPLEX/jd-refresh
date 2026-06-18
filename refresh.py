@@ -1,279 +1,319 @@
 #!/usr/bin/env python3
 """
-京东校园招聘自动刷新活跃度脚本
+京东校园招聘自动刷新活跃度脚本。
+
+安全原则：
+1. 启动后不做任何 Cookie/API 预检请求。
+2. 只在北京时间 09:30 或 17:30 的目标窗口内发送刷新请求。
+3. 请求发送前先记录状态，避免同一时段重复触发导致重复请求。
 """
+import json
 import os
 import sys
-import json
 import time
+from datetime import datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
 import requests
-from datetime import datetime
+
+
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+TARGET_TIMES = ((9, 30), (17, 30))
+EARLY_START_WINDOW = timedelta(minutes=30)
+LATE_GRACE_WINDOW = timedelta(minutes=45)
+COOLDOWN_PROTECTION = timedelta(hours=8, seconds=30)
+STATE_PATH = Path(".refresh-state") / "state.json"
 
 
 class JDCampusRefresh:
     """京东校园招聘活跃度刷新器"""
 
     def __init__(self):
-        # 从环境变量读取 Cookie
-        self.cookie = os.getenv('JD_COOKIE', '')
-
-        # 投递记录 ID（写死，从 HAR 文件中提取）
-        # 如需修改，直接编辑这里的列表
+        self.cookie = os.getenv("JD_COOKIE", "")
         self.delivery_record_ids = [3802615]
-
-        # API 端点
-        self.check_url = "https://campus.jd.com/api/wx/resume/checkCanResumeRefresh"
         self.refresh_url = "https://campus.jd.com/api/wx/resume/refresh"
-
-        # 请求头
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-            'Content-Type': 'application/json; charset=UTF-8',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Referer': 'https://campus.jd.com/api/wx/position/index?type=internship',
-            'Origin': 'https://campus.jd.com',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'sec-ch-ua': '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Dest': 'empty',
-            'Cookie': self.cookie
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/149.0.0.0 Safari/537.36"
+            ),
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://campus.jd.com/api/wx/position/index?type=internship",
+            "Origin": "https://campus.jd.com",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Cookie": self.cookie,
         }
 
+    def now(self):
+        return datetime.now(BEIJING_TZ)
+
     def validate_config(self):
-        """验证配置是否完整"""
+        """只验证本地配置，不发送网络请求。"""
         if not self.cookie:
-            print("❌ 错误: 未配置 JD_COOKIE 环境变量")
+            print("错误: 未配置 JD_COOKIE 环境变量")
             return False
 
         if not self.delivery_record_ids:
-            print("❌ 错误: 投递记录 ID 列表为空，请在代码中配置")
+            print("错误: 投递记录 ID 列表为空，请在代码中配置")
             return False
 
         return True
 
-    def test_cookie_validity(self):
-        """测试 Cookie 是否有效（首次运行时验证）"""
-        print("🔍 验证 Cookie 有效性...")
+    def load_state(self):
+        if not STATE_PATH.exists():
+            return {"slots": {}}
+
         try:
-            # 使用获取投递列表 API 来验证 Cookie
-            url = "https://campus.jd.com/api/wx/delivery/officialInfo/list"
-            payload = {"pageNo": 1, "pageSize": 1}
+            with STATE_PATH.open("r", encoding="utf-8") as f:
+                state = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"状态文件读取失败，将按首次运行处理: {exc}")
+            return {"slots": {}}
 
-            response = requests.post(
-                url,
-                headers=self.headers,
-                json=payload,
-                timeout=30
-            )
-            response.raise_for_status()
-            data = response.json()
+        if not isinstance(state, dict):
+            return {"slots": {}}
+        if not isinstance(state.get("slots"), dict):
+            state["slots"] = {}
+        return state
 
-            if data.get('success'):
-                print("✅ Cookie 有效！\n")
-                return True
-            else:
-                error_msg = data.get('message', '未知错误')
-                print(f"❌ Cookie 无效: {error_msg}\n")
-                return False
+    def save_state(self, state):
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = STATE_PATH.with_suffix(".tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.write("\n")
+        tmp_path.replace(STATE_PATH)
 
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Cookie 验证失败: {e}\n")
-            return False
-        except Exception as e:
-            print(f"❌ 验证过程出错: {e}\n")
-            return False
-
-    def check_can_refresh(self, delivery_record_id):
-        """检查是否可以刷新活跃度"""
+    def parse_datetime(self, value):
+        if not value:
+            return None
         try:
-            payload = {"deliveryRecordId": delivery_record_id}
-            response = requests.post(
-                self.check_url,
-                headers=self.headers,
-                json=payload,
-                timeout=30
-            )
-            response.raise_for_status()
-            data = response.json()
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
 
-            print(f"  检查结果: {json.dumps(data, ensure_ascii=False)}")
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=BEIJING_TZ)
+        return parsed.astimezone(BEIJING_TZ)
 
-            # 检查是否认证失败
-            body = data.get('body', {})
-            if isinstance(body, dict) and body.get('code') == 401:
-                print(f"  ❌ 认证失败: Cookie 可能已过期或无效")
-                return False, data
+    def target_datetimes_for_day(self, day):
+        return [
+            datetime(day.year, day.month, day.day, hour, minute, tzinfo=BEIJING_TZ)
+            for hour, minute in TARGET_TIMES
+        ]
 
-            if data.get('success') and body.get('canRefresh'):
-                return True, data
+    def current_target(self, now):
+        for target in self.target_datetimes_for_day(now):
+            if target - EARLY_START_WINDOW <= now <= target + LATE_GRACE_WINDOW:
+                return target
+        return None
+
+    def next_target(self, now):
+        candidates = self.target_datetimes_for_day(now)
+        tomorrow = now + timedelta(days=1)
+        candidates.extend(self.target_datetimes_for_day(tomorrow))
+        return min(target for target in candidates if target > now)
+
+    def slot_key(self, target):
+        return target.strftime("%Y-%m-%d %H:%M")
+
+    def wait_until(self, target, reason):
+        while True:
+            now = self.now()
+            seconds = (target - now).total_seconds()
+            if seconds <= 0:
+                return
+
+            if seconds > 60:
+                print(f"等待{reason}: 还剩 {int(seconds // 60)} 分钟")
             else:
-                return False, data
+                print(f"等待{reason}: 还剩 {int(seconds)} 秒")
 
-        except requests.exceptions.RequestException as e:
-            print(f"  ❌ 检查请求失败: {e}")
-            return False, {}
-        except json.JSONDecodeError as e:
-            print(f"  ❌ 解析响应失败: {e}")
-            return False, {}
+            time.sleep(max(1, min(60, seconds)))
+
+    def latest_recorded_request_time(self, state):
+        times = [
+            self.parse_datetime(state.get("last_request_at")),
+            self.parse_datetime(state.get("last_success_at")),
+        ]
+        times = [value for value in times if value]
+        return max(times) if times else None
+
+    def enforce_cooldown(self, state, target):
+        """避免 09:30 实际发送延迟后，17:30 提前撞 8 小时冷却。"""
+        last_request_at = self.latest_recorded_request_time(state)
+        if not last_request_at:
+            return True
+
+        next_allowed_at = last_request_at + COOLDOWN_PROTECTION
+        now = self.now()
+        if now >= next_allowed_at:
+            return True
+
+        if next_allowed_at <= target + LATE_GRACE_WINDOW:
+            print(
+                "检测到上次刷新请求时间为 "
+                f"{last_request_at.strftime('%Y-%m-%d %H:%M:%S')}，"
+                f"为保护 8 小时冷却，将等到 {next_allowed_at.strftime('%H:%M:%S')} 再请求。"
+            )
+            self.wait_until(next_allowed_at, "8 小时冷却保护")
+            return True
+
+        print(
+            "当前距离上次刷新请求不足 8 小时，且安全请求时间已超出本次窗口；"
+            "本次不发送任何请求。"
+        )
+        return False
 
     def refresh_activity(self, delivery_record_id):
-        """刷新活跃度"""
+        """直接刷新活跃度。此方法是唯一会请求京东接口的地方。"""
         try:
             payload = {"deliveryRecordId": delivery_record_id}
             response = requests.post(
                 self.refresh_url,
                 headers=self.headers,
                 json=payload,
-                timeout=30
+                timeout=30,
             )
             response.raise_for_status()
             data = response.json()
 
             print(f"  刷新结果: {json.dumps(data, ensure_ascii=False)}")
 
-            # 检查是否认证失败
-            body = data.get('body', {})
-            if isinstance(body, dict) and body.get('code') == 401:
-                print(f"  ❌ 认证失败: Cookie 可能已过期或无效")
+            body = data.get("body", {})
+            if isinstance(body, dict) and body.get("code") == 401:
+                print("  认证失败: Cookie 可能已过期或无效")
                 return False
 
-            if data.get('success') and isinstance(body, dict):
-                notice_msg = body.get('noticeMsg', '刷新成功')
-                if body.get('success'):
-                    print(f"  ✅ {notice_msg}")
-                    return True
-                else:
-                    error_msg = body.get('message', '刷新失败')
-                    print(f"  ❌ {error_msg}")
-                    return False
+            if data.get("success") and isinstance(body, dict) and body.get("success"):
+                notice_msg = body.get("noticeMsg", "刷新成功")
+                print(f"  成功: {notice_msg}")
+                return True
+
+            if isinstance(body, dict):
+                error_msg = body.get("message") or body.get("noticeMsg") or "刷新失败"
             else:
-                error_msg = data.get('message', '刷新失败')
-                print(f"  ❌ {error_msg}")
-                return False
-
-        except requests.exceptions.RequestException as e:
-            print(f"  ❌ 刷新请求失败: {e}")
+                error_msg = data.get("message", "刷新失败")
+            print(f"  失败: {error_msg}")
             return False
-        except json.JSONDecodeError as e:
-            print(f"  ❌ 解析响应失败: {e}")
+
+        except requests.exceptions.RequestException as exc:
+            print(f"  刷新请求失败: {exc}")
+            return False
+        except json.JSONDecodeError as exc:
+            print(f"  解析响应失败: {exc}")
             return False
 
     def run(self):
-        """执行刷新任务"""
-        # 获取北京时间（UTC+8）
-        import pytz
-        beijing_tz = pytz.timezone('Asia/Shanghai')
-        beijing_time = datetime.now(beijing_tz)
+        now = self.now()
+        print(f"\n{'=' * 60}")
+        print("京东校园招聘活跃度刷新任务")
+        print(f"当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')} (北京时间 UTC+8)")
+        print("目标时间: 09:30 / 17:30 (北京时间 UTC+8)")
+        print(f"{'=' * 60}\n")
 
-        print(f"\n{'='*60}")
-        print(f"🚀 京东校园招聘活跃度刷新任务")
-        print(f"⏰ 执行时间: {beijing_time.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)")
-        print(f"{'='*60}\n")
+        state = self.load_state()
+        target = self.current_target(now)
+        if not target:
+            next_target = self.next_target(now)
+            print(
+                "当前不在目标刷新窗口内，不发送任何京东请求。"
+                f"下一次目标时间: {next_target.strftime('%Y-%m-%d %H:%M:%S')} (北京时间)"
+            )
+            return
 
-        # 验证配置
+        slot_key = self.slot_key(target)
+        slot_state = state.setdefault("slots", {}).get(slot_key, {})
+        if slot_state.get("request_sent_at"):
+            print(f"{slot_key} 这个时段已经发送过刷新请求，本次直接退出。")
+            return
+
         if not self.validate_config():
             sys.exit(1)
 
-        # 首次验证 Cookie 是否有效
-        if not self.test_cookie_validity():
-            print("❌ Cookie 验证失败，请检查 JD_COOKIE 配置是否正确")
-            print("💡 提示：请重新获取 Cookie 并更新 GitHub Secret")
-            sys.exit(1)
+        if now < target:
+            print(
+                f"Action 已提前启动；目标刷新时间是 "
+                f"{target.strftime('%Y-%m-%d %H:%M:%S')}，到点前不会发送请求。"
+            )
+            self.wait_until(target, "目标刷新时间")
 
-        # 投递记录 ID 列表
-        record_ids = self.delivery_record_ids
+        state = self.load_state()
+        slot_state = state.setdefault("slots", {}).get(slot_key, {})
+        if slot_state.get("request_sent_at"):
+            print(f"{slot_key} 这个时段已经发送过刷新请求，本次直接退出。")
+            return
 
-        if not record_ids:
-            print("❌ 错误: 投递记录 ID 列表为空")
-            sys.exit(1)
+        if not self.enforce_cooldown(state, target):
+            state["slots"][slot_key] = {
+                **slot_state,
+                "target_at": target.isoformat(),
+                "skipped_at": self.now().isoformat(),
+                "status": "skipped_cooldown",
+            }
+            self.save_state(state)
+            return
 
-        print(f"📋 待刷新的投递记录数量: {len(record_ids)}\n")
+        request_time = self.now()
+        state["slots"][slot_key] = {
+            **slot_state,
+            "target_at": target.isoformat(),
+            "request_sent_at": request_time.isoformat(),
+            "status": "request_sent",
+        }
+        state["last_request_at"] = request_time.isoformat()
+        self.save_state(state)
+        print(f"已进入目标时段 {slot_key}，现在只发送真正的刷新请求。")
+        print(f"待刷新的投递记录数量: {len(self.delivery_record_ids)}\n")
 
         success_count = 0
         fail_count = 0
-        cooldown_count = 0  # 冷却期计数
-        auth_failed = False  # 标记是否遇到认证失败
-
-        # 处理每个投递记录
-        for idx, record_id in enumerate(record_ids, 1):
-            print(f"[{idx}/{len(record_ids)}] 处理投递记录: {record_id}")
-
-            # 先检查是否可以刷新
-            can_refresh, check_data = self.check_can_refresh(record_id)
-
-            # 检查是否认证失败
-            if isinstance(check_data.get('body'), dict) and check_data.get('body', {}).get('code') == 401:
-                auth_failed = True
-                fail_count += 1
-                print()
-                continue
-
-            # 检查是否在冷却期
-            body = check_data.get('body', {})
-            if not body.get('canRefresh') and body.get('noticeMsg'):
-                notice_msg = body.get('noticeMsg', '')
-                print(f"  ⏰ 冷却期: {notice_msg}")
-                cooldown_count += 1
-                print()
-                continue
-
-            if can_refresh:
-                # 执行刷新
-                time.sleep(2)  # 避免请求过快
-                if self.refresh_activity(record_id):
-                    success_count += 1
-                else:
-                    fail_count += 1
+        for idx, record_id in enumerate(self.delivery_record_ids, 1):
+            print(f"[{idx}/{len(self.delivery_record_ids)}] 处理投递记录: {record_id}")
+            if self.refresh_activity(record_id):
+                success_count += 1
             else:
-                print(f"  ⚠️ 暂时无法刷新")
                 fail_count += 1
 
-            print()
-
-            # 如果还有下一条记录，等待 3 秒
-            if idx < len(record_ids):
+            if idx < len(self.delivery_record_ids):
                 time.sleep(3)
-
-        # 统计结果
-        print(f"{'='*60}")
-        print(f"📊 执行结果统计:")
-        print(f"  ✅ 成功刷新: {success_count}")
-        print(f"  ⏰ 冷却期中: {cooldown_count}")
-        print(f"  ❌ 失败: {fail_count}")
-        print(f"  📝 总计: {len(record_ids)}")
-        print(f"{'='*60}\n")
-
-        # 如果遇到认证失败，输出特殊提示
-        if auth_failed:
-            print("⚠️  检测到认证失败 (401 错误)")
-            print("💡 可能原因：")
-            print("   1. Cookie 已过期，请重新获取并更新 JD_COOKIE Secret")
-            print("   2. Cookie 不完整，请确保复制了所有 Cookie 字段")
-            print("   3. 账号在其他地方登录，导致当前 Cookie 失效")
-            print()
-            print("🔧 解决方法：")
-            print("   1. 重新登录京东校园招聘网站")
-            print("   2. 按 F12 → Application → Cookies → campus.jd.com")
-            print("   3. 按 Ctrl+A 全选所有 Cookie 并复制")
-            print("   4. 更新 GitHub Secret JD_COOKIE")
             print()
 
-        # 如果有冷却期的记录，给出提示
-        if cooldown_count > 0:
-            print("💡 提示：部分记录在冷却期内，这是正常现象")
-            print("   京东规定刷新后需等待 8 小时才能再次刷新")
-            print("   脚本将在下次定时执行时自动重试")
-            print()
+        completed_at = self.now()
+        state = self.load_state()
+        slot_state = state.setdefault("slots", {}).get(slot_key, {})
+        state["slots"][slot_key] = {
+            **slot_state,
+            "completed_at": completed_at.isoformat(),
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "status": "success" if success_count > 0 and fail_count == 0 else "failed",
+        }
+        if success_count > 0:
+            state["last_success_at"] = completed_at.isoformat()
+        self.save_state(state)
 
-        # 只有真正失败（非冷却期）的才退出码为 1
-        if fail_count > 0 and success_count == 0 and cooldown_count == 0:
-            sys.exit(1)
+        print(f"{'=' * 60}")
+        print("执行结果统计:")
+        print(f"  成功刷新: {success_count}")
+        print(f"  失败: {fail_count}")
+        print(f"  总计: {len(self.delivery_record_ids)}")
+        print(f"{'=' * 60}\n")
+
+        if fail_count > 0:
+            print("本次已经发送过刷新请求。为避免重复消耗刷新机会，不自动重试。")
+            print("请查看上方京东接口返回内容判断是否需要人工处理 Cookie 或投递记录 ID。")
 
 
-if __name__ == '__main__':
-    refresher = JDCampusRefresh()
-    refresher.run()
+if __name__ == "__main__":
+    JDCampusRefresh().run()
